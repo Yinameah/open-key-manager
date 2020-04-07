@@ -22,7 +22,6 @@
 import wx
 
 from okm.gui.mainwindow import MainWindow
-from okm.gui.arduinosimulator import SimulatorWindow
 
 import argparse
 import logging
@@ -56,9 +55,16 @@ def main():
         )
 
     app = wx.App()
-    mainwindow = MainWindow(None)
 
     if args.with_simulator:
+        from okm.gui.arduinosimulator import SimulatorWindow
+        from okm.backend.arduino_crawler import ArduinoCrawler
+
         simulatorwindow = SimulatorWindow(None)
 
+        # J'initialize le crawler sur arduinos virtuels ;-)
+        # Comme c'est un singleton, il le sera toujours dans mainwindow
+        ArduinoCrawler(virtual=True, virtual_arduinos=simulatorwindow.arduinos)
+
+    mainwindow = MainWindow(None)
     app.MainLoop()

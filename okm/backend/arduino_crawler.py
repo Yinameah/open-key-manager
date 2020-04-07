@@ -22,6 +22,8 @@
 import threading
 import queue
 import time
+import logging
+import sys
 
 
 class Singleton(type):
@@ -39,7 +41,7 @@ class ArduinoCrawler(metaclass=Singleton):
 
     """Un thread qui poll les arduino pour savoir si on badge"""
 
-    def __init__(self):
+    def __init__(self, virtual=False, virtual_arduinos=None):
         """
         Initialisation du crawler
         C'est un singleton qui expose une queue (self.queue) qui 
@@ -49,18 +51,40 @@ class ArduinoCrawler(metaclass=Singleton):
         self.queue = queue.Queue()
 
         self.loop_flag = threading.Event()
-        t = threading.Thread(name="ArduinoCrawler", target=self.loop)
+
+        if virtual:
+            if virtual_arduinos is None:
+                logging.fatal("Try to start a virtual crawler without virtual arduinos")
+                sys.exit()
+            else:
+                self.virtual_arduinos = virtual_arduinos
+
+            t = threading.Thread(name="ArduinoCrawler", target=self.virtual_loop)
+        else:
+            t = threading.Thread(name="ArduinoCrawler", target=self.loop)
+
         t.start()
+
+    def virtual_loop(self):
+
+        print("Start virtual polling loop")
+
+        while not self.loop_flag.is_set():
+
+            for a in self.virtual_arduinos:
+                arduino_id, current_key = a.poll()
+                # TODO : continuer ici :
+                # Il faut foutre ces infos en DB, voir s'il faut un lock ou
+                # si on récupère la queueu ailleurs, etc ...
+                self.queue.put(arduino_id, current_key)
+
+                time.sleep(0.2)
 
     def loop(self):
 
         while not self.loop_flag.is_set():
-            if not self.queue.empty():
-                val = self.queue.get()
-                print(val)
-
-            time.sleep(0.5)
+            print("Polling des vrais arduino, not implemented yet ...")
+            time.sleep(1)
 
     def stop(self):
-        print("set stop flag")
         self.loop_flag.set()

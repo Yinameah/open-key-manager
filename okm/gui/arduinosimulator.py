@@ -23,10 +23,14 @@
 import wx
 
 from pathlib import Path
+import sqlite3
+import queue
+import argparse
+import logging
 
 from okm.backend.arduino_crawler import ArduinoCrawler
 
-CRAWLER = ArduinoCrawler()
+DB_PATH = Path(__file__).parent.parent / "db.sqlite3"
 
 
 class SimulatorWindow(wx.Frame):
@@ -53,12 +57,30 @@ class SimulatorWindow(wx.Frame):
         sizer.Add(button, pos=(0, 2), flag=wx.EXPAND)
         self.Bind(wx.EVT_BUTTON, self.onBadge, button)
 
-        self.SetSizer(sizer)
-        self.Show()
-
         self.arduinos = []
         self.make_arduinos(3)
         self.arduino_combobox.Select(0)
+
+        self.populate_keys()
+
+        self.SetSizer(sizer)
+        self.Show()
+
+    def populate_keys(self):
+
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM keys")
+        r = c.fetchall()
+        conn.close()
+
+        for line in r:
+            self.key_combobox.Append(
+                f"{line['key_id']} ({line['name']} {line['surname']})"
+            )
+
+        self.key_combobox.Select(0)
 
     def make_arduinos(self, n):
         for i in range(n):
@@ -68,8 +90,9 @@ class SimulatorWindow(wx.Frame):
 
     def onBadge(self, event):
         n = self.arduino_combobox.GetSelection()
-        print(f"on badge sur {self.arduinos[n]}")
-        CRAWLER.queue.put(self.arduinos[n].id)
+        key_id, name = self.key_combobox.GetValue().split(" (")
+        name = name.strip(")")
+        self.arduinos[n].badge(key_id)
 
 
 class VirtualArduino:
@@ -79,11 +102,30 @@ class VirtualArduino:
     def __init__(self, uid):
         """Init a virtual arduino """
 
-        self.is_on = False
+        self.current_key = None
         self.id = uid
 
-    def got_badge(self):
-        self.is_on = not self.is_on
+    def badge(self, key_id):
+        """
+        Simule l'action de badger sur un arduino
+        """
+        logging.info(f"got badge {key_id}")
+
+        if self.current_key is None:
+            logging.info(f"Activation de l'arduino {self.id} pour clé {key_id}")
+            self.current_key = key_id
+        else:
+            if key_id == self.current_key:
+                logging.info(f"Deactivate plug")
+                self.current_key = None
+            else:
+                logging.info(f"Already on for other user, do nothing")
+
+    def poll(self):
+        """
+        Simule le polling du raspy sur l'arduino
+        """
+        return self.id, self.current_key
 
     def __str__(self):
         return f"< VirtualArduino object with id : {self.id} >"
