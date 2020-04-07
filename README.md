@@ -1,9 +1,16 @@
 # A simple rfid keys managment system
 
-___---
+---
 
 TODO
 
 
 ---
+
+### Dependencies
+
+The software depend on :
+
+1. wxPython
+
 
