@@ -30,7 +30,7 @@ class MainWindow(wx.Frame):
     """
 
     def __init__(self, *args, **kw):
-        super(MainWindow, self).__init__(*args, **kw)
+        super().__init__(*args, **kw)
 
         self.MinSize = (300, 200)
 
@@ -67,13 +67,13 @@ class MainWindow(wx.Frame):
         ######################
         viewMenu = wx.Menu()
 
-        vue1 = viewMenu.Append(wx.ID_ANY, "Vue 1", kind=wx.ITEM_RADIO)
+        vue1 = viewMenu.Append(wx.ID_ANY, "Vue &1", kind=wx.ITEM_RADIO)
         self.Bind(wx.EVT_MENU, self.onVue1, vue1)
 
-        vue2 = viewMenu.Append(wx.ID_ANY, "Vue 2", kind=wx.ITEM_RADIO)
+        vue2 = viewMenu.Append(wx.ID_ANY, "Vue &2", kind=wx.ITEM_RADIO)
         self.Bind(wx.EVT_MENU, self.onVue2, vue2)
 
-        vue3 = viewMenu.Append(wx.ID_ANY, "Vue 3", kind=wx.ITEM_RADIO)
+        vue3 = viewMenu.Append(wx.ID_ANY, "Vue &3", kind=wx.ITEM_RADIO)
         self.Bind(wx.EVT_MENU, self.onVue3, vue3)
 
         menuBar.Append(viewMenu, "&Vues")
@@ -102,28 +102,41 @@ class MainWindow(wx.Frame):
 
         self.SetMenuBar(menuBar)
 
-        # self.SetMenuBar(menuBar)
-
     def _makeLayout(self):
         """ Main Layout """
 
-        self.main_panel = wx.Panel()
-        sizer = wx.BoxSizer()
+        # Note à moi-même :
+        # var = wx.Panel(self) ici suffit à foutre le panel.
+        # Mais s'il y en a plusieurs, alors il faut passer un sizer plutôt, sinon
+        # la taille du panel est ingérable
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.txt = wx.TextCtrl(self)
+        self.vues = [Vue1(self), Vue2(self), Vue3(self)]
+        for vue in self.vues:
+            sizer.Add(vue, flag=wx.EXPAND | wx.ALIGN_CENTER)
 
-        sizer.Add(self.txt, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
-
+        # J'imagine que s'il y a qu'un seul enfant, setsizer est appelé en interne
         self.SetSizer(sizer)
 
+        self.showVue(0)
+
     def onVue1(self, event):
-        print("Vue1 activée")
+        self.showVue(0)
 
     def onVue2(self, event):
-        print("Vue2 activée")
+        self.showVue(1)
 
     def onVue3(self, event):
-        print("Vue3 activée")
+        self.showVue(2)
+
+    def showVue(self, n):
+        for i, vue in enumerate(self.vues):
+            if i == n:
+                vue.Show()
+                # vue.Fit()
+                self.Layout()
+            else:
+                vue.Hide()
 
     def onNewKey(self, event):
         print("Nouvelle clé")
@@ -164,6 +177,49 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         wx.MessageBox(
             msg, "À propos", wx.OK | wx.ICON_INFORMATION,
         )
+
+
+class Vue1(wx.Panel):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.txt = wx.TextCtrl(self)
+        self.txt2 = wx.TextCtrl(self)
+
+        sizer.Add(self.txt, border=15, proportion=3, flag=wx.ALL)
+        sizer.Add(self.txt2, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
+
+        self.SetSizer(sizer)
+
+        self.BackgroundColour = wx.RED
+
+
+class Vue2(wx.Panel):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.txt = wx.StaticText(self, label="Un label")
+
+        sizer.Add(self.txt, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
+
+        self.SetSizer(sizer)
+
+
+class Vue3(wx.Panel):
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.btn = wx.Button(self, label="Un label pour bouton")
+
+        sizer.Add(self.btn, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
+
+        self.SetSizer(sizer)
 
 
 if __name__ == "__main__":
