@@ -22,6 +22,7 @@
 import wx
 
 from okm.gui.mainwindow import MainWindow
+from okm.gui.arduinosimulator import SimulatorWindow
 
 import argparse
 import logging
@@ -31,18 +32,23 @@ def main():
     # Parser des arguments de ligne de commande
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-log", "--log", choices=["info", "debug"], help="Increase logging level"
+        "-l", "--log", choices=["info", "debug"], help="Increase logging level"
+    )
+    parser.add_argument(
+        "--with_simulator", help="Run an arduino simulator", action="store_true"
     )
 
-    log_level = parser.parse_args().log
+    args = parser.parse_args()
+    print(args)
 
-    if log_level == "info":
+    if args.log == "info":
         logging.basicConfig(
             level=logging.INFO,
-            format="%(asctime)s.%(msecs)03d %(levelname)s [%(module)s/%(funcName)s]: %(message)s",
+            format="%(asctime)s.%(msecs)03d %(levelname)s "
+            "[%(module)s/%(funcName)s]: %(message)s",
             datefmt="%H:%M:%S",
         )
-    elif log_level == "debug":
+    elif args.log == "debug":
         logging.basicConfig(
             level=logging.DEBUG,
             format="%(asctime)s.%(msecs)03d %(levelname)s [%(module)s/%(funcName)s]: %(message)s",
@@ -50,7 +56,9 @@ def main():
         )
 
     app = wx.App()
-    mainwindow = MainWindow(None, title="Open Key Manager")
-    mainwindow.Show()
+    mainwindow = MainWindow(None)
+
+    if args.with_simulator:
+        simulatorwindow = SimulatorWindow(None)
 
     app.MainLoop()

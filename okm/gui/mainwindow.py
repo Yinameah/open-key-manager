@@ -22,6 +22,12 @@
 import wx
 
 from pathlib import Path
+import sqlite3
+
+from okm.backend.arduino_crawler import ArduinoCrawler
+from okm.gui.newkey import NewKeyDialog
+
+DB_PATH = Path(__file__).parent.parent / "db.sqlite3"
 
 
 class MainWindow(wx.Frame):
@@ -42,10 +48,16 @@ class MainWindow(wx.Frame):
         self._makeMenuBar()
         self._makeLayout()
 
+        self.SetTitle("Open Key Manager")
+
         self.CreateStatusBar()
         self.SetStatusText("Bienvenue")
 
+        self.Bind(wx.EVT_CLOSE, self.OnCloseMainWindow, self)
+
         self.Show()
+
+        self.crawler = ArduinoCrawler()
 
     def _makeMenuBar(self):
         """ Menu of application """
@@ -83,7 +95,7 @@ class MainWindow(wx.Frame):
         ######################
         keysMenu = wx.Menu()
 
-        new_key = keysMenu.Append(wx.ID_ANY, "Ajouter une nouvelle clé")
+        new_key = keysMenu.Append(wx.ID_ANY, "Ajouter une &nouvelle clé")
         self.Bind(wx.EVT_MENU, self.onNewKey, new_key)
         modif_key = keysMenu.Append(wx.ID_ANY, "Gérer les accès d'une clé")
         self.Bind(wx.EVT_MENU, self.onModifKey, modif_key)
@@ -139,7 +151,23 @@ class MainWindow(wx.Frame):
                 vue.Hide()
 
     def onNewKey(self, event):
-        print("Nouvelle clé")
+        dlg = NewKeyDialog(self)
+        result = dlg.ShowModal()
+
+        if result == wx.ID_OK:
+            key_id = dlg.key_id.GetValue()
+            name = dlg.name.GetValue()
+            surname = dlg.surname.GetValue()
+            email = dlg.email.GetValue()
+            phone = dlg.phone.GetValue()
+
+            new_data = (key_id, name, surname, email, phone)
+
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("INSERT INTO keys VALUES (?, ?, ?, ?, ?)", new_data)
+            conn.commit()
+            conn.close()
 
     def onModifKey(self, event):
         print("Éditer une clé")
@@ -149,6 +177,13 @@ class MainWindow(wx.Frame):
         Close frame, end application
         """
         self.Close()
+
+    def OnCloseMainWindow(self, event):
+        """
+        React to close event
+        """
+        self.crawler.stop()
+        event.Skip()
 
     def onAbout(self, event):
         """
@@ -225,5 +260,5 @@ class Vue3(wx.Panel):
 if __name__ == "__main__":
 
     app = wx.App()
-    frm = MainWindow(None, title="Open Key Manager")
+    frm = MainWindow(None)
     app.MainLoop()
