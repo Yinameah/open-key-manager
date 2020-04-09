@@ -22,6 +22,7 @@
 import wx
 
 from okm.gui.mainwindow import MainWindow
+from okm.glob import DB_PATH
 
 import argparse
 import logging

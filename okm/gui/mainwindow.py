@@ -25,9 +25,9 @@ from pathlib import Path
 import sqlite3
 
 from okm.backend.arduino_crawler import ArduinoCrawler
-from okm.gui.newkey import NewKeyDialog
-
-DB_PATH = Path(__file__).parent.parent / "db.sqlite3"
+from okm.gui.newkeydialog import NewKeyDialog
+from okm.gui.editkeydialog import EditKeyDialog
+from okm.glob import DB_PATH
 
 
 class MainWindow(wx.Frame):
@@ -97,7 +97,7 @@ class MainWindow(wx.Frame):
 
         new_key = keysMenu.Append(wx.ID_ANY, "Ajouter une &nouvelle clé")
         self.Bind(wx.EVT_MENU, self.onNewKey, new_key)
-        modif_key = keysMenu.Append(wx.ID_ANY, "Gérer les accès d'une clé")
+        modif_key = keysMenu.Append(wx.ID_ANY, "&Gérer les accès d'une clé")
         self.Bind(wx.EVT_MENU, self.onModifKey, modif_key)
 
         menuBar.Append(keysMenu, "Gestion des &clés")
@@ -170,7 +170,23 @@ class MainWindow(wx.Frame):
             conn.close()
 
     def onModifKey(self, event):
-        print("Éditer une clé")
+        dlg = EditKeyDialog(self)
+        result = dlg.ShowModal()
+
+        if result == wx.ID_OK:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+
+            key_id = dlg.key_combobox.id[dlg.key_combobox.GetValue()]
+
+            conn.set_trace_callback(print)
+            for a_id in dlg.arduinos_cb:
+                c.execute(
+                    f"""UPDATE perms SET '{a_id}'=? WHERE key_id=?""",
+                    (dlg.arduinos_cb[a_id].GetValue(), key_id),
+                )
+            conn.commit()
+            conn.close()
 
     def onExit(self, event):
         """
