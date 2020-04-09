@@ -179,7 +179,7 @@ class MainWindow(wx.Frame):
 
             key_id = dlg.key_combobox.id[dlg.key_combobox.GetValue()]
 
-            conn.set_trace_callback(print)
+            # conn.set_trace_callback(print)
             for a_id in dlg.arduinos_cb:
                 c.execute(
                     f"""UPDATE perms SET '{a_id}'=? WHERE key_id=?""",

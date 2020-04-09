@@ -24,6 +24,10 @@ import queue
 import time
 import logging
 import sys
+import datetime
+import sqlite3
+
+from okm.glob import DB_PATH
 
 
 class Singleton(type):
@@ -44,11 +48,8 @@ class ArduinoCrawler(metaclass=Singleton):
     def __init__(self, virtual=False, virtual_arduinos=None):
         """
         Initialisation du crawler
-        C'est un singleton qui expose une queue (self.queue) qui 
-        contient les events de badge qui proviennent des arduinos
+        C'est un singleton qui cause aux arduinos et gère les lock/unlocks
         """
-
-        self.queue = queue.Queue()
 
         self.loop_flag = threading.Event()
 
@@ -58,6 +59,13 @@ class ArduinoCrawler(metaclass=Singleton):
                 sys.exit()
             else:
                 self.virtual_arduinos = virtual_arduinos
+
+                for a in self.virtual_arduinos:
+                    a.send("init")
+
+                # {'arduino_id': 'unlock_key', ... }
+                # with 'unlock_key' == 'key_id' | None if locked
+                self.arduino_states = {a.id: None for a in self.virtual_arduinos}
 
             t = threading.Thread(name="ArduinoCrawler", target=self.virtual_loop)
         else:
@@ -72,11 +80,56 @@ class ArduinoCrawler(metaclass=Singleton):
         while not self.loop_flag.is_set():
 
             for a in self.virtual_arduinos:
-                arduino_id, current_key = a.poll()
-                # TODO : continuer ici :
-                # Il faut foutre ces infos en DB, voir s'il faut un lock ou
-                # si on récupère la queueu ailleurs, etc ...
-                self.queue.put(arduino_id, current_key)
+                a_id, request_key = a.poll()
+                if request_key is not None:
+
+                    conn = sqlite3.connect(DB_PATH)
+                    conn.row_factory = sqlite3.Row
+                    c = conn.cursor()
+                    c.execute("SELECT * FROM perms WHERE key_id=?", (request_key,))
+                    # key_id is UNIQUE, so fetchone() makes sense
+                    r = c.fetchone()
+
+                    if r[a_id] == 1:
+                        print("Cet utilisateur a le droit d'ouvrir cet arduino. Départ")
+                        timestamp = datetime.datetime.now()
+
+                        if self.arduino_states[a_id] == None:
+                            print("On déverouille")
+                            self.arduino_states[a_id] = request_key
+                            a.send("open")
+
+                            lock_state = "unlocked"
+
+                            c = conn.cursor()
+                            c.execute(
+                                "INSERT INTO stamps VALUES (?, ?, ?, ?)",
+                                (a_id, request_key, timestamp, lock_state),
+                            )
+
+                        elif self.arduino_states[a_id] == request_key:
+                            print("Même user, on reverouille")
+                            self.arduino_states[a_id] = None
+                            a.send("close")
+
+                            lock_state = "locked"
+
+                            c = conn.cursor()
+                            c.execute(
+                                "INSERT INTO stamps VALUES (?, ?, ?, ?)",
+                                (a_id, request_key, timestamp, lock_state),
+                            )
+
+                        else:
+                            print("Déjà utilisé par quelqu'un d'autre ...")
+                            a.send("ignore")
+
+                    else:
+                        print("Verboooten !")
+                        a.send("ignore")
+
+                    conn.commit()
+                    conn.close()
 
                 time.sleep(0.2)
 
