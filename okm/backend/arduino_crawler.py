@@ -60,12 +60,14 @@ class ArduinoCrawler(metaclass=Singleton):
             else:
                 self.virtual_arduinos = virtual_arduinos
 
-                for a in self.virtual_arduinos:
+                for a in self.virtual_arduinos.values():
                     a.send("init")
 
                 # {'arduino_id': 'unlock_key', ... }
                 # with 'unlock_key' == 'key_id' | None if locked
-                self.arduino_states = {a.id: None for a in self.virtual_arduinos}
+                self.arduino_states = {
+                    a.id: None for a in self.virtual_arduinos.values()
+                }
 
             t = threading.Thread(name="ArduinoCrawler", target=self.virtual_loop)
         else:
@@ -79,7 +81,7 @@ class ArduinoCrawler(metaclass=Singleton):
 
         while not self.loop_flag.is_set():
 
-            for a in self.virtual_arduinos:
+            for a in self.virtual_arduinos.values():
                 a_id, request_key = a.poll()
                 if request_key is not None:
 

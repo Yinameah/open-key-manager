@@ -60,7 +60,8 @@ class SimulatorWindow(wx.Frame):
         sizer.Add(button, pos=(0, 2), flag=wx.EXPAND)
         self.Bind(wx.EVT_BUTTON, self.onBadge, button)
 
-        self.arduinos = []
+        # {'desc': <VirtualArduino>, ... }
+        self.arduinos = {}
         self.make_arduinos(3)
         self.arduino_combobox.Select(0)
 
@@ -88,14 +89,14 @@ class SimulatorWindow(wx.Frame):
     def make_arduinos(self, n):
         for a_id, desc in ARDUINOS_DESC.items():
             virt_arduino = VirtualArduino(a_id, desc)
-            self.arduinos.append(virt_arduino)
-            self.arduino_combobox.Append(f"Arduino{virt_arduino.id}")
+            self.arduinos[desc] = virt_arduino
+            self.arduino_combobox.Append(virt_arduino.desc)
 
     def onBadge(self, event):
-        n = self.arduino_combobox.GetSelection()
+        a_desc = self.arduino_combobox.GetValue()
         key_id, name = self.key_combobox.GetValue().split(" (")
         name = name.strip(")")
-        self.arduinos[n].badge(key_id)
+        self.arduinos[a_desc].badge(key_id)
 
 
 class VirtualArduino:
