@@ -22,12 +22,16 @@
 import wx
 
 from pathlib import Path
+import logging
+import datetime
 import sqlite3
+import threading
+import copy
 
 from okm.backend.arduino_crawler import ArduinoCrawler
 from okm.gui.newkeydialog import NewKeyDialog
 from okm.gui.editkeydialog import EditKeyDialog
-from okm.glob import DB_PATH
+from okm.glob import DB_PATH, ARDUINOS_DESC, LOCK
 
 
 class MainWindow(wx.Frame):
@@ -79,7 +83,7 @@ class MainWindow(wx.Frame):
         ######################
         viewMenu = wx.Menu()
 
-        vue1 = viewMenu.Append(wx.ID_ANY, "Vue &1", kind=wx.ITEM_RADIO)
+        vue1 = viewMenu.Append(wx.ID_ANY, "Vue &1 - Live", kind=wx.ITEM_RADIO)
         self.Bind(wx.EVT_MENU, self.onVue1, vue1)
 
         vue2 = viewMenu.Append(wx.ID_ANY, "Vue &2", kind=wx.ITEM_RADIO)
@@ -121,11 +125,11 @@ class MainWindow(wx.Frame):
         # var = wx.Panel(self) ici suffit à foutre le panel.
         # Mais s'il y en a plusieurs, alors il faut passer un sizer plutôt, sinon
         # la taille du panel est ingérable
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer = wx.BoxSizer(wx.VERTICAL)
 
         self.vues = [Vue1(self), Vue2(self), Vue3(self)]
         for vue in self.vues:
-            sizer.Add(vue, flag=wx.EXPAND | wx.ALIGN_CENTER)
+            sizer.Add(vue, flag=wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=12)
 
         # J'imagine que s'il y a qu'un seul enfant, setsizer est appelé en interne
         self.SetSizer(sizer)
@@ -145,7 +149,7 @@ class MainWindow(wx.Frame):
         for i, vue in enumerate(self.vues):
             if i == n:
                 vue.Show()
-                # vue.Fit()
+                vue.Fit()
                 self.Layout()
             else:
                 vue.Hide()
@@ -230,21 +234,117 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
         )
 
 
+def expanded(widget, padding=6):
+    sizer = wx.BoxSizer()
+    sizer.Add(widget, wx.ID_ANY, wx.EXPAND | wx.ALL, padding)
+    return sizer
+
+
 class Vue1(wx.Panel):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
 
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        # self.arduinos_live_infos = {
+        #    {"arduino_id": {
+        #        "key": "key_id" | None,
+        #        "full_name": "Bli Blou",
+        #    }}
+        self.arduinos_live_infos = {a_id: {} for a_id in ARDUINOS_DESC}
 
-        self.txt = wx.TextCtrl(self)
-        self.txt2 = wx.TextCtrl(self)
+        sizer = wx.GridSizer(4, 8, 8)
 
-        sizer.Add(self.txt, border=15, proportion=3, flag=wx.ALL)
-        sizer.Add(self.txt2, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
+        font = self.GetFont()
+        font.SetUnderlined(True)
+
+        txt = wx.StaticText(self, label="Locker")
+        txt.SetFont(font)
+        sizer.Add(txt)
+        txt = wx.StaticText(self, label="Status")
+        sizer.Add(txt)
+        txt.SetFont(font)
+        txt = wx.StaticText(self, label="Utilisateur")
+        sizer.Add(txt)
+        txt.SetFont(font)
+        txt = wx.StaticText(self, label="Temps d'utilisation")
+        sizer.Add(txt)
+        txt.SetFont(font)
+
+        self.staticTexts = {}
+        for a_id, desc in ARDUINOS_DESC.items():
+            txt_line = []
+
+            txt = wx.StaticText(self, label=desc)
+            sizer.Add(txt)
+            txt_line.append(txt)
+            txt = wx.StaticText(self, label="status")
+            sizer.Add(txt)
+            txt_line.append(txt)
+            txt = wx.StaticText(self, label="user")
+            sizer.Add(txt)
+            txt_line.append(txt)
+            txt = wx.StaticText(self, label="Time")
+            sizer.Add(txt)
+            txt_line.append(txt)
+
+            self.staticTexts[a_id] = txt_line
+
+        self.update_infos()
 
         self.SetSizer(sizer)
 
-        self.BackgroundColour = wx.RED
+    def update_infos(self, *event):
+
+        logging.debug("Update de Vue1")
+        # {'arduino_id': 'unlock_key', ... }
+        # self.crawler.arduinos_states
+        with LOCK:
+            states = copy.deepcopy(ArduinoCrawler().arduinos_states)
+
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT * FROM keys")
+        r_keys = c.fetchall()
+        conn.close()
+
+        for a_id in self.staticTexts:
+            # key_id is None = > Pas d'utilisateur "loggé"
+            if states[a_id] is None:
+                self.staticTexts[a_id][1].SetLabel("LOCKED")
+                self.staticTexts[a_id][2].SetLabel("N/A")
+                self.staticTexts[a_id][3].SetLabel(" -- -- -- ")
+            else:
+                self.staticTexts[a_id][1].SetLabel("UNLOCKED")
+                for line in r_keys:
+                    if line["key_id"] == states[a_id]:
+                        self.staticTexts[a_id][2].SetLabel(
+                            line["name"] + " " + line["surname"]
+                        )
+
+                conn = sqlite3.connect(DB_PATH)
+                conn.row_factory = sqlite3.Row
+                # conn.set_trace_callback(print)
+                c = conn.cursor()
+                c.execute(
+                    "SELECT * FROM stamps WHERE key_id = ? AND arduino_id = ?"
+                    " ORDER BY timestamp DESC LIMIT 1",
+                    (states[a_id], a_id),
+                )
+                r_stamp = c.fetchone()
+                conn.close()
+
+                now = datetime.datetime.now()
+                starttime = datetime.datetime.strptime(
+                    r_stamp["timestamp"], "%Y-%m-%d %H:%M:%S.%f"
+                )
+                duration = now - starttime
+                self.staticTexts[a_id][3].SetLabel(str(duration).split(".")[0])
+
+        self.GetParent().Fit()
+
+        self.timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.update_infos, self.timer)
+        self.timer.Start(1000)
 
 
 class Vue2(wx.Panel):

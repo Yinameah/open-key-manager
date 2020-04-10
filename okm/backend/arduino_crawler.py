@@ -27,7 +27,7 @@ import sys
 import datetime
 import sqlite3
 
-from okm.glob import DB_PATH
+from okm.glob import DB_PATH, LOCK
 
 
 class Singleton(type):
@@ -65,7 +65,7 @@ class ArduinoCrawler(metaclass=Singleton):
 
                 # {'arduino_id': 'unlock_key', ... }
                 # with 'unlock_key' == 'key_id' | None if locked
-                self.arduino_states = {
+                self.arduinos_states = {
                     a.id: None for a in self.virtual_arduinos.values()
                 }
 
@@ -96,9 +96,11 @@ class ArduinoCrawler(metaclass=Singleton):
                         print("Cet utilisateur a le droit d'ouvrir cet arduino. Départ")
                         timestamp = datetime.datetime.now()
 
-                        if self.arduino_states[a_id] == None:
+                        if self.arduinos_states[a_id] == None:
                             print("On déverouille")
-                            self.arduino_states[a_id] = request_key
+                            with LOCK:
+                                self.arduinos_states[a_id] = request_key
+
                             a.send("open")
 
                             lock_state = "unlocked"
@@ -106,12 +108,14 @@ class ArduinoCrawler(metaclass=Singleton):
                             c = conn.cursor()
                             c.execute(
                                 "INSERT INTO stamps VALUES (?, ?, ?, ?)",
-                                (a_id, request_key, timestamp, lock_state),
+                                (request_key, a_id, timestamp, lock_state),
                             )
 
-                        elif self.arduino_states[a_id] == request_key:
+                        elif self.arduinos_states[a_id] == request_key:
                             print("Même user, on reverouille")
-                            self.arduino_states[a_id] = None
+                            with LOCK:
+                                self.arduinos_states[a_id] = None
+
                             a.send("close")
 
                             lock_state = "locked"
@@ -119,7 +123,7 @@ class ArduinoCrawler(metaclass=Singleton):
                             c = conn.cursor()
                             c.execute(
                                 "INSERT INTO stamps VALUES (?, ?, ?, ?)",
-                                (a_id, request_key, timestamp, lock_state),
+                                (request_key, a_id, timestamp, lock_state),
                             )
 
                         else:

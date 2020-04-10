@@ -20,6 +20,7 @@
 #
 
 from pathlib import Path
+import threading
 
 """
 Global values
@@ -32,3 +33,7 @@ DB_PATH = Path(__file__).parent / "db.sqlite3"
 # /!/ order count
 # {'id' : 'description', ... }
 ARDUINOS_DESC = {"10": "Tour Metal", "20": "3d printer", "30": "autre"}
+
+
+# Brute force but might do the trick ...
+LOCK = threading.Lock()
