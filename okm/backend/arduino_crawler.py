@@ -71,6 +71,9 @@ class ArduinoCrawler(metaclass=Singleton):
 
             t = threading.Thread(name="ArduinoCrawler", target=self.virtual_loop)
         else:
+            # TODO : Ici, il faudra demander le dernier état, fermer les arduinos
+            # ET enregistrer en DB le close le cas échéant. Comme ça en cas de crash
+            # on maintient la BD dans un état cohérent
             t = threading.Thread(name="ArduinoCrawler", target=self.loop)
 
         t.start()

@@ -60,6 +60,10 @@ class SimulatorWindow(wx.Frame):
         sizer.Add(button, pos=(0, 2), flag=wx.EXPAND)
         self.Bind(wx.EVT_BUTTON, self.onBadge, button)
 
+        button = wx.Button(self, label="Reload Users")
+        sizer.Add(button, pos=(2, 2))
+        self.Bind(wx.EVT_BUTTON, self.populate_keys, button)
+
         # {'desc': <VirtualArduino>, ... }
         self.arduinos = {}
         self.make_arduinos(3)
@@ -70,7 +74,9 @@ class SimulatorWindow(wx.Frame):
         self.SetSizer(sizer)
         self.Show()
 
-    def populate_keys(self):
+    def populate_keys(self, *event):
+
+        self.key_combobox.Clear()
 
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row

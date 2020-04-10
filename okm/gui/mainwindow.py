@@ -170,6 +170,7 @@ class MainWindow(wx.Frame):
             conn = sqlite3.connect(DB_PATH)
             c = conn.cursor()
             c.execute("INSERT INTO keys VALUES (?, ?, ?, ?, ?)", new_data)
+            c.execute("INSERT INTO perms VALUES (?, ?, ?, ?)", (key_id, 0, 0, 0))
             conn.commit()
             conn.close()
 
