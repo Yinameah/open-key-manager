@@ -22,10 +22,13 @@
 import wx
 
 from okm.gui.mainwindow import MainWindow
-from okm.glob import DB_PATH
+from okm.backend.arduino_crawler import ArduinoCrawler
+from okm.glob import DB_PATH, ARDUINOS_DESC
 
 import argparse
 import logging
+import sqlite3
+import datetime
 
 
 def main():
@@ -39,7 +42,7 @@ def main():
     )
 
     args = parser.parse_args()
-    print(args)
+    # print(args)
 
     if args.log == "info":
         logging.basicConfig(
@@ -59,13 +62,48 @@ def main():
 
     if args.with_simulator:
         from okm.gui.arduinosimulator import SimulatorWindow
-        from okm.backend.arduino_crawler import ArduinoCrawler
 
         simulatorwindow = SimulatorWindow(None)
 
-        # J'initialize le crawler sur arduinos virtuels ;-)
-        # Comme c'est un singleton, il le sera toujours dans mainwindow
-        ArduinoCrawler(virtual=True, virtual_arduinos=simulatorwindow.arduinos)
+    # Verify that we don't have entry in DB that stayed open (from a crash)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT key_id FROM keys")
+    r1 = c.fetchall()
+
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM stamps ORDER BY timestamp DESC ")
+    r2 = c.fetchall()
+    conn.close()
+
+    key_to_check = [l[0] for l in r1]
+    key_to_check.sort()
+    key_already_checked = []
+    for line in r2:
+        if line["key_id"] not in key_already_checked:
+            key_already_checked.append(line["key_id"])
+            if line["lock_state"] == "unlocked":
+
+                print(f"La clé {line['key_id']} est restée ouverte. On y remédie...")
+
+                timestamp = datetime.datetime.now()
+                new_data = (line["key_id"], line["arduino_id"], timestamp, "error")
+
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute("INSERT INTO stamps VALUES (?, ?, ?, ?)", new_data)
+                conn.commit()
+                conn.close()
+
+        if key_to_check == sorted(key_already_checked):
+            break
+
+    # Start crawler
+    ArduinoCrawler()
 
     mainwindow = MainWindow(None)
     app.MainLoop()
+
+    # TODO :
+    # Close all stamps in DB and close all arduinos when quitting application

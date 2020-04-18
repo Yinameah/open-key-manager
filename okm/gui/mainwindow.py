@@ -20,6 +20,7 @@
 #
 
 import wx
+from wx import dataview
 
 from pathlib import Path
 import logging
@@ -32,11 +33,12 @@ from okm.backend.arduino_crawler import ArduinoCrawler
 from okm.gui.newkeydialog import NewKeyDialog
 from okm.gui.editkeydialog import EditKeyDialog
 from okm.glob import DB_PATH, ARDUINOS_DESC, LOCK
+from okm.utils import DbCursor
 
 
 class MainWindow(wx.Frame):
     """ 
-    Main Window of the software
+    Main Window of the software 
     """
 
     def __init__(self, *args, **kw):
@@ -50,6 +52,8 @@ class MainWindow(wx.Frame):
         self.SetIcon(img)
 
         self._makeMenuBar()
+        # Show before makeLayout to allow Vue0 update infos to start
+        self.Show()
         self._makeLayout()
 
         self.SetTitle("Open Key Manager")
@@ -58,10 +62,6 @@ class MainWindow(wx.Frame):
         self.SetStatusText("Bienvenue")
 
         self.Bind(wx.EVT_CLOSE, self.OnCloseMainWindow, self)
-
-        self.Show()
-
-        self.crawler = ArduinoCrawler()
 
     def _makeMenuBar(self):
         """ Menu of application """
@@ -135,9 +135,11 @@ class MainWindow(wx.Frame):
         self.SetSizer(sizer)
 
         self.showVue(0)
+        self.vues[0].update_infos()
 
     def onVue1(self, event):
         self.showVue(0)
+        self.vues[0].update_infos()
 
     def onVue2(self, event):
         self.showVue(1)
@@ -152,10 +154,19 @@ class MainWindow(wx.Frame):
                 vue.Fit()
                 self.Layout()
             else:
+                try:
+                    vue.timer.Stop()
+                except AttributeError as e:
+                    pass
                 vue.Hide()
 
-    def onNewKey(self, event):
-        dlg = NewKeyDialog(self)
+    def onNewKey(self, *event, **kw):
+
+        new_key = kw.get("new_key", None)
+        if new_key is None:
+            dlg = NewKeyDialog(self)
+        else:
+            dlg = NewKeyDialog(self, new_key=new_key)
         result = dlg.ShowModal()
 
         if result == wx.ID_OK:
@@ -203,7 +214,7 @@ class MainWindow(wx.Frame):
         """
         React to close event
         """
-        self.crawler.stop()
+        ArduinoCrawler().stop()
         event.Skip()
 
     def onAbout(self, event):
@@ -289,16 +300,31 @@ class Vue1(wx.Panel):
 
             self.staticTexts[a_id] = txt_line
 
-        self.update_infos()
-
         self.SetSizer(sizer)
 
     def update_infos(self, *event):
 
         logging.debug("Update de Vue1")
-        # {'arduino_id': 'unlock_key', ... }
-        # self.crawler.arduinos_states
+
         with LOCK:
+            # {'unknown_key', 'key_id',
+            #
+            # }
+            notify = copy.deepcopy(ArduinoCrawler().mainwindow_notify)
+            ArduinoCrawler().mainwindow_notify.clear()
+
+        new_key = notify.get("unknown_key", None)
+        if new_key is not None:
+            resp = wx.MessageBox(
+                "On a détecté une clé inconnue. Vous souhaitez l'ajouter ?",
+                "Nouvelle clé",
+                style=wx.OK | wx.CANCEL,
+            )
+            if resp == wx.OK:
+                self.GetParent().onNewKey(new_key=new_key)
+
+        with LOCK:
+            # {'arduino_id': 'unlock_key', ... }
             states = copy.deepcopy(ArduinoCrawler().arduinos_states)
 
         conn = sqlite3.connect(DB_PATH)
@@ -322,17 +348,13 @@ class Vue1(wx.Panel):
                             line["name"] + " " + line["surname"]
                         )
 
-                conn = sqlite3.connect(DB_PATH)
-                conn.row_factory = sqlite3.Row
-                # conn.set_trace_callback(print)
-                c = conn.cursor()
-                c.execute(
-                    "SELECT * FROM stamps WHERE key_id = ? AND arduino_id = ?"
-                    " ORDER BY timestamp DESC LIMIT 1",
-                    (states[a_id], a_id),
-                )
-                r_stamp = c.fetchone()
-                conn.close()
+                with DbCursor() as c:
+                    c.execute(
+                        "SELECT * FROM stamps WHERE key_id = ? AND arduino_id = ?"
+                        " ORDER BY timestamp DESC LIMIT 1",
+                        (states[a_id], a_id),
+                    )
+                    r_stamp = c.fetchone()
 
                 now = datetime.datetime.now()
                 starttime = datetime.datetime.strptime(
@@ -343,9 +365,10 @@ class Vue1(wx.Panel):
 
         self.GetParent().Fit()
 
-        self.timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, self.update_infos, self.timer)
-        self.timer.Start(1000)
+        if self.IsShownOnScreen():
+            self.timer = wx.Timer(self)
+            self.Bind(wx.EVT_TIMER, self.update_infos, self.timer)
+            self.timer.Start(1000, wx.TIMER_ONE_SHOT)
 
 
 class Vue2(wx.Panel):
@@ -354,11 +377,18 @@ class Vue2(wx.Panel):
 
         sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.txt = wx.StaticText(self, label="Un label")
+        self.stampTab = dataview.DataViewListCtrl(self)
+        self.stampTab.AppendToggleColumn("Toggle")
+        self.stampTab.AppendTextColumn("Column !")
 
-        sizer.Add(self.txt, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
+        self.stampTab.AppendItem([True, "row1"])
+        self.stampTab.AppendItem([False, "row3"])
 
-        self.SetSizer(sizer)
+        sizer.Add(self.stampTab, border=5, flag=wx.GROW | wx.ALL)
+
+        self.BackgroundColour = wx.RED
+
+        self.SetSizerAndFit(sizer)
 
 
 class Vue3(wx.Panel):

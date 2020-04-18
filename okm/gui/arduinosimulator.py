@@ -31,6 +31,7 @@ import threading
 import time
 
 from okm.backend.arduino_crawler import ArduinoCrawler
+from okm.backend.arduinos import get_arduinos
 from okm.glob import DB_PATH, ARDUINOS_DESC
 
 DB_PATH = Path(__file__).parent.parent / "db.sqlite3"
@@ -93,105 +94,19 @@ class SimulatorWindow(wx.Frame):
         self.key_combobox.Select(0)
 
     def make_arduinos(self, n):
-        for a_id, desc in ARDUINOS_DESC.items():
-            virt_arduino = VirtualArduino(a_id, desc)
-            self.arduinos[desc] = virt_arduino
-            self.arduino_combobox.Append(virt_arduino.desc)
+        all_arduinos = get_arduinos()
+        for arduino in all_arduinos:
+            if arduino.type == "virtual":
+                virt_arduino = arduino
+                virt_arduino.send("init")
+                self.arduinos[desc] = virt_arduino
+                self.arduino_combobox.Append(virt_arduino.desc)
 
     def onBadge(self, event):
         a_desc = self.arduino_combobox.GetValue()
         key_id, name = self.key_combobox.GetValue().split(" (")
         name = name.strip(")")
         self.arduinos[a_desc].badge(key_id)
-
-
-class VirtualArduino:
-
-    """
-    Virtual arduino for dev purposes
-
-    Logique :
-    1) Quand l'arduino détecte un badge, il stocke l'id de la clé et passe son 
-        status à "wait_for_answer". Puis il start une loop d'attente
-    2) Il attends d'être pollé par l'arduino. Il retourne les infos
-        (l'id de la clé et l'id de l'Arduino)
-    3) Quand il reçoit une réponse, il stocke l'action a effectuer dans son status
-        ce qui a pour effet d'arrêter la boucle d'attente
-    4) L'ordre est traité (ouverture/fermeture) et l'arduino revient à l'état d'origine
-    """
-
-    def __init__(self, uid, desc):
-        """Init a virtual arduino """
-
-        self.id = uid
-        self.desc = desc
-
-        self.pending_key_id = None
-        self.is_open = False
-        # 'idle' | 'wait_for_answer' | 'wait_to_open' | 'wait_to_close'
-        self.status = "idle"
-
-    def badge(self, key_id):
-        """
-        Simule l'action de badger sur un arduino
-        """
-        if self.status == "idle":
-
-            logging.info(f"{self} got badge {key_id}")
-            self.pending_key_id = key_id
-
-            self.status = "wait_for_answer"
-
-            def wait_for_answer():
-                while self.status == "wait_for_answer":
-                    time.sleep(0.2)
-
-                if self.status == "wait_for_close":
-                    print(f"{self} got order to close")
-                    self.is_open = False
-
-                if self.status == "wait_for_open":
-                    print(f"{self} got order to open")
-                    self.is_open = True
-
-                self.status = "idle"
-                self.pending_key_id = None
-
-            logging.info(f"Start wait_for_answer loop")
-            t = threading.Thread(name="Arduino wait_for_answer", target=wait_for_answer)
-            t.start()
-
-    def poll(self):
-        """
-        Simule le polling du raspy sur l'arduino
-
-        :return: (id, pending_key_id)
-        :id: (str) ID de l'arduino
-        :pending_key_id: (str) ID de la clé, None if no badge
-        """
-        return self.id, self.pending_key_id
-
-    def send(self, order):
-        """
-        Simule l'envoi d'un ordre à l'arduino
-
-        :order: (str) can be "open", "close", "ignore", "init"
-        """
-        if order == "init":
-            self.is_open = False
-            self.status = "idle"
-        elif order == "ignore":
-            self.status = "idle"
-        else:
-            if self.status == "wait_for_answer":
-                with threading.Lock():
-                    if order == "open":
-                        self.status = "wait_for_open"
-                    elif order == "close":
-                        self.status = "wait_for_close"
-
-    def __str__(self):
-        return f"< VirtualArduino object with id : {self.id} >"
 
 
 if __name__ == "__main__":

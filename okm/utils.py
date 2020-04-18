@@ -19,21 +19,20 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 
-from pathlib import Path
-import threading
+import sqlite3
 
-"""
-Global values
-"""
-
-# Path of database
-DB_PATH = Path(__file__).parent / "db.sqlite3"
-
-# Description des arduinos
-# /!/ order count for DB
-# {'id' : 'description', ... }
-ARDUINOS_DESC = {"10": "Tour Metal", "20": "3d printer", "30": "autre"}
+from okm.glob import DB_PATH
 
 
-# Brute force but might do the trick ...
-LOCK = threading.Lock()
+class DbCursor:
+    def __enter__(self):
+        self.conn = sqlite3.connect(DB_PATH)
+        self.conn.row_factory = sqlite3.Row
+        # self.conn.set_trace_callback(print)
+        c = self.conn.cursor()
+
+        return c
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.conn.commit()
+        self.conn.close()

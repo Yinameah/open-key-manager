@@ -31,6 +31,15 @@ except ImportError as e:
 
 class NewKeyDialog(wx.Dialog):
     def __init__(self, *args, **kw):
+
+        try:
+            new_key = kw["new_key"]
+        except KeyError as e:
+            new_key = None
+        else:
+            # If left behind, breaks wx call ...
+            del kw["new_key"]
+
         super().__init__(*args, style=wx.DEFAULT_DIALOG_STYLE, **kw)
 
         self.SetTitle("Ajouter une nouvelle clé")
@@ -45,6 +54,8 @@ class NewKeyDialog(wx.Dialog):
             validator=validators.EnterSomethingValidator(),
             size=(250, -1),
         )
+        if new_key is not None:
+            self.key_id.SetValue(new_key)
         fields.Add(self.key_id, flag=wx.ALL, border=8)
 
         txt = wx.StaticText(self, label="Prénom :")
