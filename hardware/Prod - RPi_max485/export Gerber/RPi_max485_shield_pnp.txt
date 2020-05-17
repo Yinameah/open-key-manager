@@ -1,0 +1,33 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=RPi_max485_shield
+*Date=20:22:52
+*CreatedBy=Fritzing 0.9.4..
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;;62.731;-10.8346;0;Bottom;TXT1
+2;;;12.7152;-12.3022;0;Bottom;Jumper1
+3;;;36.4028;-39.6423;0;Bottom;TXT1
+4;;;5.12474;-38.8937;0;Bottom;TXT1
+5;;s4b-ph;5.41139;-28.3522;-90;Top;X1
+6;120;THT;38.1152;-16.1122;-90;Bottom;Term
+7;;;62.0838;-4.2895;0;Bottom;Hole1
+8;;;37.1442;-35.3189;0;Bottom;TXT1
+9;;THT;60.7974;-15.9059;180;Bottom;OUT 5v (periph)
+10;;THT;4.07919;-44.1792;0;Bottom;IN 5-30V
+11;;;4.98607;-48.5203;0;Bottom;TXT1
+12;;;52.9856;-45.9188;0;Bottom;Hole3
+13;;;55.955;-20.109;0;Bottom;TXT1
+14;;;43.103;20.278;0;Bottom;Raspberry Pi 1
+15;;;35.3169;-36.7299;0;Bottom;M4
+16;;board;28.3216;-15.3486;180;Bottom;485
+17;;;4.09877;-4.07162;0;Bottom;Hole2
+18;;;22.6513;-29.617;0;Bottom;Hole4

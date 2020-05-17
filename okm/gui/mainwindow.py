@@ -33,6 +33,7 @@ from okm.backend.arduino_crawler import ArduinoCrawler
 from okm.gui.newkeydialog import NewKeyDialog
 from okm.gui.editkeydialog import EditKeyDialog
 from okm.glob import DB_PATH, ARDUINOS_DESC, LOCK
+import okm.glob
 from okm.utils import DbCursor
 
 
@@ -86,10 +87,10 @@ class MainWindow(wx.Frame):
         vue1 = viewMenu.Append(wx.ID_ANY, "Vue &1 - Live", kind=wx.ITEM_RADIO)
         self.Bind(wx.EVT_MENU, self.onVue1, vue1)
 
-        vue2 = viewMenu.Append(wx.ID_ANY, "Vue &2", kind=wx.ITEM_RADIO)
+        vue2 = viewMenu.Append(wx.ID_ANY, "Vue &2 - Recap", kind=wx.ITEM_RADIO)
         self.Bind(wx.EVT_MENU, self.onVue2, vue2)
 
-        vue3 = viewMenu.Append(wx.ID_ANY, "Vue &3", kind=wx.ITEM_RADIO)
+        vue3 = viewMenu.Append(wx.ID_ANY, "Vue &3 - Log", kind=wx.ITEM_RADIO)
         self.Bind(wx.EVT_MENU, self.onVue3, vue3)
 
         menuBar.Append(viewMenu, "&Vues")
@@ -126,20 +127,19 @@ class MainWindow(wx.Frame):
         # Mais s'il y en a plusieurs, alors il faut passer un sizer plutôt, sinon
         # la taille du panel est ingérable
         sizer = wx.BoxSizer(wx.VERTICAL)
+        flags = wx.SizerFlags(1).Expand().Border(wx.ALL, 10)
 
         self.vues = [Vue1(self), Vue2(self), Vue3(self)]
         for vue in self.vues:
-            sizer.Add(vue, flag=wx.EXPAND | wx.ALIGN_CENTER | wx.ALL, border=12)
+            sizer.Add(vue, flags)
 
         # J'imagine que s'il y a qu'un seul enfant, setsizer est appelé en interne
         self.SetSizer(sizer)
 
         self.showVue(0)
-        self.vues[0].update_infos()
 
     def onVue1(self, event):
         self.showVue(0)
-        self.vues[0].update_infos()
 
     def onVue2(self, event):
         self.showVue(1)
@@ -153,6 +153,10 @@ class MainWindow(wx.Frame):
                 vue.Show()
                 vue.Fit()
                 self.Layout()
+                try:
+                    vue.update_infos()
+                except AttributeError:
+                    pass
             else:
                 try:
                     vue.timer.Stop()
@@ -190,19 +194,15 @@ class MainWindow(wx.Frame):
         result = dlg.ShowModal()
 
         if result == wx.ID_OK:
-            conn = sqlite3.connect(DB_PATH)
-            c = conn.cursor()
-
             key_id = dlg.key_combobox.id[dlg.key_combobox.GetValue()]
 
             # conn.set_trace_callback(print)
-            for a_id in dlg.arduinos_cb:
-                c.execute(
-                    f"""UPDATE perms SET '{a_id}'=? WHERE key_id=?""",
-                    (dlg.arduinos_cb[a_id].GetValue(), key_id),
-                )
-            conn.commit()
-            conn.close()
+            with DbCursor() as c:
+                for a_id in dlg.arduinos_cb:
+                    c.execute(
+                        f"""UPDATE perms SET '{a_id}'=? WHERE key_id=?""",
+                        (dlg.arduinos_cb[a_id].GetValue(), key_id),
+                    )
 
     def onExit(self, event):
         """
@@ -327,12 +327,9 @@ class Vue1(wx.Panel):
             # {'arduino_id': 'unlock_key', ... }
             states = copy.deepcopy(ArduinoCrawler().arduinos_states)
 
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute("SELECT * FROM keys")
-        r_keys = c.fetchall()
-        conn.close()
+        with DbCursor() as c:
+            c.execute("SELECT * FROM keys")
+            r_keys = c.fetchall()
 
         for a_id in self.staticTexts:
             # key_id is None = > Pas d'utilisateur "loggé"
@@ -363,7 +360,7 @@ class Vue1(wx.Panel):
                 duration = now - starttime
                 self.staticTexts[a_id][3].SetLabel(str(duration).split(".")[0])
 
-        self.GetParent().Fit()
+        # self.GetParent().Fit()
 
         if self.IsShownOnScreen():
             self.timer = wx.Timer(self)
@@ -375,20 +372,85 @@ class Vue2(wx.Panel):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
 
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer = wx.BoxSizer(wx.VERTICAL)
+        flags = wx.SizerFlags(1).Expand()
+
+        col_flags = (
+            wx.dataview.DATAVIEW_COL_RESIZABLE | wx.dataview.DATAVIEW_COL_SORTABLE
+        )
+
+        self.searchCtrl = wx.SearchCtrl(self, size=wx.Size(80, 40))
+        self.searchCtrl.ShowCancelButton(True)
+
+        sizer.Add(self.searchCtrl, border=15, flag=wx.ALIGN_CENTER_HORIZONTAL | wx.BOTH)
 
         self.stampTab = dataview.DataViewListCtrl(self)
-        self.stampTab.AppendToggleColumn("Toggle")
-        self.stampTab.AppendTextColumn("Column !")
+        self.stampTab.AppendTextColumn("Nom", flags=col_flags)
+        self.stampTab.AppendTextColumn("Prénom", flags=col_flags)
+        self.stampTab.AppendTextColumn("Machine", flags=col_flags)
+        self.stampTab.AppendTextColumn("Début", flags=col_flags)
+        self.stampTab.AppendTextColumn("Fin", flags=col_flags)
+        self.stampTab.AppendTextColumn("Durée", flags=col_flags)
+        self.stampTab.AppendTextColumn("Remarque", flags=col_flags)
 
-        self.stampTab.AppendItem([True, "row1"])
-        self.stampTab.AppendItem([False, "row3"])
-
-        sizer.Add(self.stampTab, border=5, flag=wx.GROW | wx.ALL)
-
-        self.BackgroundColour = wx.RED
+        sizer.Add(self.stampTab, flags)
 
         self.SetSizerAndFit(sizer)
+
+    def update_infos(self):
+
+        self.stampTab.DeleteAllItems()
+
+        with DbCursor() as c:
+            c.execute("SELECT key_id,name,surname FROM keys")
+            keys = c.fetchall()
+
+        for key in keys:
+            for a_id in ARDUINOS_DESC:
+
+                with DbCursor() as c:
+                    c.execute(
+                        "SELECT * FROM stamps WHERE key_id=? AND arduino_id=? "
+                        "ORDER BY timestamp DESC ",
+                        (key["key_id"], a_id,),
+                    )
+                    stamps = c.fetchall()
+
+                new_entry = ["", "", "", "", "", "", ""]
+
+                for stamp in stamps:
+
+                    if (
+                        stamp["lock_state"] == "locked"
+                        or stamp["lock_state"] == "error"
+                    ):
+                        new_entry[0] = key["name"]
+                        new_entry[1] = key["surname"]
+                        new_entry[2] = ARDUINOS_DESC[stamp["arduino_id"]]
+
+                        new_entry[4] = stamp["timestamp"]
+                        if stamp["lock_state"] == "error":
+                            new_entry[6] = "Inscrit après un crash. Peut être incorrect"
+
+                    elif stamp["lock_state"] == "unlocked" and new_entry != []:
+                        new_entry[3] = stamp["timestamp"]
+                    else:
+                        raise RuntimeError(
+                            "Inconsistant DB state. Impossilbe to extract data properly"
+                        )
+
+                    if new_entry[3] != "" and new_entry[4] != "" and new_entry[5] == "":
+                        starttime = datetime.datetime.strptime(
+                            new_entry[3], "%Y-%m-%d %H:%M:%S.%f"
+                        )
+                        endtime = datetime.datetime.strptime(
+                            new_entry[4], "%Y-%m-%d %H:%M:%S.%f"
+                        )
+                        duration = endtime - starttime
+                        new_entry[5] = str(duration).split(".")[0]
+
+                        self.stampTab.AppendItem(new_entry)
+                        new_entry = ["", "", "", "", "", "", ""]
 
 
 class Vue3(wx.Panel):
@@ -397,11 +459,25 @@ class Vue3(wx.Panel):
 
         sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        self.btn = wx.Button(self, label="Un label pour bouton")
+        self.logger = wx.ListBox(self, name="Logger")
 
-        sizer.Add(self.btn, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
+        sizer.Add(self.logger, border=15, proportion=1, flag=wx.EXPAND | wx.ALL)
+
+        self.Bind(wx.EVT_SCROLL_LINEUP, self.onScrollUp, self)
 
         self.SetSizer(sizer)
+
+        okm.glob.logger = self
+
+    def log(self, string):
+        """ Add a string to the view with time """
+
+        n = self.logger.GetCount()
+        self.logger.InsertItems([f"{datetime.datetime.now()} // {string}"], n)
+        self.logger.EnsureVisible(n)
+
+    def onScrollUp(self, event):
+        print(event)
 
 
 if __name__ == "__main__":

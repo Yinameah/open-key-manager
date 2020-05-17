@@ -29,11 +29,25 @@ Global values
 # Path of database
 DB_PATH = Path(__file__).parent / "db.sqlite3"
 
-# Description des arduinos
+# Description des arduinos. C'est pour leur donner un nom dans le gui
+# Cette liste doit être cohérente avec la déclaration d'arduinos dans
+# okm.backend.arduinos.get_arduinos(), qui réuitile les mêmes ids que ici
+# et déclare le type d'appareils en jeu
 # /!/ order count for DB
 # {'id' : 'description', ... }
-ARDUINOS_DESC = {"10": "Tour Metal", "20": "3d printer", "30": "autre"}
+ARDUINOS_DESC = {10: "Tour Metal"}  # , 20: "3d printer", 30: "autre"}
 
 
 # Brute force but might do the trick ...
 LOCK = threading.Lock()
+
+# Other brute force approach ...
+# Define moc logger object ... Later, this will be shadowed by gui logger
+# Because crawler is started before Gui, it needs empty API to work until
+# GUI logger is ready
+class MocLogger:
+    def log(*args):
+        pass
+
+
+logger = MocLogger()

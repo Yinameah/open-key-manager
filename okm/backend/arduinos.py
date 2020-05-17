@@ -39,6 +39,11 @@ In this module, we defines arduinos
 
 Allow to have various ways of comminication with differents arduinos
 
+Each class of device MUST implement an id property, which correspond to
+ARDUINOS_DESC déclaration in okm.glob
+
+MUST also implement API of crawler, nocitabley, recv_message & send_message
+
 """
 
 
@@ -47,10 +52,16 @@ def get_arduinos():
     Return a list of arduinos
     """
 
+    ###################################################
+    # List of devices to read keys from
+    # Various classes (type of devices) can be initialized
+    # The crawler will loop over them and send/receive messages
+    ###################################################
     arduinos = [
-        USBArduino("10", "85735313932351B011E2"),
-        VirtualArduino("20"),
-        VirtualArduino("30"),
+        USBArduino(10, "85735313932351B011E2"),
+        # USBArduino(20, "A94ZNPHH"),
+        # FIXME VirtualArdino doesn't respect API anymore. Update if needed
+        # VirtualArduino(30),
     ]
 
     # Imprimante 3d ...
@@ -83,25 +94,27 @@ class USBArduino:
         self.loop_flag = threading.Event()
         t = threading.Thread(name=f"USBArduino {serial_number} loop", target=self.loop)
 
-        self._send_queue = queue.Queue()
+        self._send_queue = queue.Queue(maxsize=1)
         self._recv_queue = queue.Queue()
 
         t.start()
 
     def loop(self):
 
-        with serial.Serial(self.serial_device, 115200, timeout=0.01) as ser:
+        with serial.Serial(self.serial_device, 115200, timeout=0.05) as ser:
             # Wait for device ready
             line = ""
             while not "confirm:ready" in line:
-                line = ser.readline().decode()
+                line = ser.read_until(";").decode()
 
             while not self.loop_flag.is_set():
 
                 if self._send_queue.empty():
-                    line = ser.readline().decode()
+                    line = ser.read_until(";").decode()
                     if line != "":
                         logging.info(f"{self} loop : arduino --> {line} ")
+                        # remove ;
+                        line = line[:-1]
                         self._recv_queue.put(line.strip())
 
                 try:
@@ -109,9 +122,8 @@ class USBArduino:
                 except queue.Empty as e:
                     pass
                 else:
-                    msg = line
                     logging.info(f"{self} loop : arduino <-- {line} ")
-                    ser.write(msg.encode())
+                    ser.write(line.encode())
 
             print("end of loop")
 
@@ -120,7 +132,7 @@ class USBArduino:
 
     def send_message(self, msg):
         """ Send message to arduino """
-        self._send_queue.put(msg)
+        self._send_queue.put(msg, timeout=5)
 
     def recv_message(self):
         """ Receive message from arduino """
@@ -149,6 +161,7 @@ class VirtualArduino:
     4) L'ordre est traité (ouverture/fermeture) et l'arduino revient à l'état d'origine
     """
 
+    # FIXME VirtualArdino doesn't respect API anymore. Update if needed
     def __init__(self, uid):
         """Init a virtual arduino """
 

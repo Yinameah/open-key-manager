@@ -24,6 +24,7 @@ import wx
 from okm.gui.mainwindow import MainWindow
 from okm.backend.arduino_crawler import ArduinoCrawler
 from okm.glob import DB_PATH, ARDUINOS_DESC
+from okm.utils import DbCursor
 
 import argparse
 import logging
@@ -58,24 +59,17 @@ def main():
             datefmt="%H:%M:%S",
         )
 
-    app = wx.App()
-
     if args.with_simulator:
         from okm.gui.arduinosimulator import SimulatorWindow
 
         simulatorwindow = SimulatorWindow(None)
 
     # Verify that we don't have entry in DB that stayed open (from a crash)
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT key_id FROM keys")
-    r1 = c.fetchall()
-
-    conn.row_factory = sqlite3.Row
-    c = conn.cursor()
-    c.execute("SELECT * FROM stamps ORDER BY timestamp DESC ")
-    r2 = c.fetchall()
-    conn.close()
+    with DbCursor() as c:
+        c.execute("SELECT key_id FROM keys")
+        r1 = c.fetchall()
+        c.execute("SELECT * FROM stamps ORDER BY timestamp DESC ")
+        r2 = c.fetchall()
 
     key_to_check = [l[0] for l in r1]
     key_to_check.sort()
@@ -99,6 +93,7 @@ def main():
         if key_to_check == sorted(key_already_checked):
             break
 
+    app = wx.App(False)
     # Start crawler
     ArduinoCrawler()
 

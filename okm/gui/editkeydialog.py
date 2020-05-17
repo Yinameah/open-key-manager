@@ -99,7 +99,7 @@ class EditKeyDialog(wx.Dialog):
         conn.close()
 
         for a_id in self.arduinos_cb:
-            if r[a_id] == 0:
+            if r[str(a_id)] == 0:
                 self.arduinos_cb[a_id].SetValue(False)
             else:
                 self.arduinos_cb[a_id].SetValue(True)

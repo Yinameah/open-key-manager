@@ -29,6 +29,7 @@ import sqlite3
 
 try:
     from okm.glob import DB_PATH, LOCK
+    import okm.glob as glob
     from okm.backend.arduinos import get_arduinos
     from okm.utils import DbCursor
 except ImportError:
@@ -78,73 +79,20 @@ class ArduinoCrawler(metaclass=Singleton):
         t = threading.Thread(name="ArduinoCrawler", target=self.loop)
         t.start()
 
-    def virtual_loop(self):
-
-        print("Start virtual polling loop")
-
-        while not self.loop_flag.is_set():
-
-            for a in self.virtual_arduinos.values():
-                a_id, request_key = a.poll()
-                if request_key is not None:
-
-                    with DbCursor as c:
-                        c.execute("SELECT * FROM perms WHERE key_id=?", (request_key,))
-                        # key_id is UNIQUE, so fetchone() makes sense
-                        r = c.fetchone()
-
-                    if r[a_id] == 1:
-                        print("Cet utilisateur a le droit d'ouvrir cet arduino. Départ")
-                        timestamp = datetime.datetime.now()
-
-                        if self.arduinos_states[a_id] == None:
-                            print("On déverouille")
-                            with LOCK:
-                                self.arduinos_states[a_id] = request_key
-
-                            a.send_message("open")
-
-                            lock_state = "unlocked"
-
-                            c = conn.cursor()
-                            c.execute(
-                                "INSERT INTO stamps VALUES (?, ?, ?, ?)",
-                                (request_key, a_id, timestamp, lock_state),
-                            )
-
-                        elif self.arduinos_states[a_id] == request_key:
-                            print("Même user, on reverouille")
-                            with LOCK:
-                                self.arduinos_states[a_id] = None
-
-                            a.send("close")
-
-                            lock_state = "locked"
-
-                            c = conn.cursor()
-                            c.execute(
-                                "INSERT INTO stamps VALUES (?, ?, ?, ?)",
-                                (request_key, a_id, timestamp, lock_state),
-                            )
-
-                        else:
-                            print("Déjà utilisé par quelqu'un d'autre ...")
-                            a.send("ignore")
-
-                    else:
-                        print("Verboooten !")
-                        a.send("ignore")
-
-                    conn.commit()
-                    conn.close()
-
-                time.sleep(0.2)
-
     def loop(self):
 
         print("Start crawler loop")
 
         while not self.loop_flag.is_set():
+            ############################################$
+            # En gros, dans ce loop sur les arduinos :
+            # - On essaie de recevoir un message. Si None : on passe
+            # - Si on a new_read:XXXX , XXXX est l'id de la clé, et on compare en DB
+            # - En envoie à l'arduine l'ordre pertinent :
+            #   order:lock | order:unlock | order:denied
+            # - Après envoi d'ordre, la fonction est bloquante jusqu'à reçevoir une réponse
+            # - Si la réponse est correcte, on effectue les incriptions en DB
+            ############################################$
             for a in self.arduinos:
 
                 msg_in = a.recv_message()
@@ -167,22 +115,26 @@ class ArduinoCrawler(metaclass=Singleton):
                     r = c.fetchone()
 
                 try:
-                    r[a.id]
+                    r[str(a.id)]
                 except TypeError:
-                    logging.warning("Seems like an unknown key is used. Reject")
+                    logging.warning(
+                        "Seems like an unknown key is used."
+                        " Notify windows and reject"
+                    )
                     with LOCK:
                         self.mainwindow_notify["unknown_key"] = request_key
+                    a.send_message("order:denied;")
                     continue
 
-                if r[a.id] == 1:
+                if r[str(a.id)] == 1:
                     print("Cet utilisateur a le droit d'ouvrir cet arduino. Départ")
                     timestamp = datetime.datetime.now()
 
                     if self.arduinos_states[a.id] == None:
 
                         print("On essaie de déverouiller")
-                        a.send_message("u")
-                        lock_state = "unlocked"
+                        a.send_message("order:unlock")
+                        lock_state = "unlocked;"
 
                         if is_answer(a, "confirm:unlock"):
                             with DbCursor() as c:
@@ -196,12 +148,12 @@ class ArduinoCrawler(metaclass=Singleton):
                         else:
                             print("Déverouillage pas marche")
                             # Prevent unwanted unlock
-                            a.send_message("l")
+                            a.send_message("order:lock;")
 
                     elif self.arduinos_states[a.id] == request_key:
 
                         print("Même user, on essaye de reverouiller")
-                        a.send_message("l")
+                        a.send_message("order:lock;")
                         lock_state = "locked"
 
                         if is_answer(a, "confirm:lock"):
@@ -216,16 +168,17 @@ class ArduinoCrawler(metaclass=Singleton):
                         else:
                             print("Reverouillage pas marche")
                             # Prevent unwanted lock
-                            a.send_message("u")
+                            a.send_message("order:unlock;")
 
                     else:
                         print("Déjà utilisé par quelqu'un d'autre ...")
-                        a.send_message("d")
+                        a.send_message("order:denied")
 
                 else:
                     print("Verboooten !")
-                    a.send_message("d")
+                    a.send_message("order:denied")
 
+            # FIXME : quasi sûr que ce sera contre productif quand on aura plusieurs arduinos
             time.sleep(0.2)
 
     def stop(self):
