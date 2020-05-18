@@ -21,34 +21,6 @@
 
 */
 
-
-/*
-
-
-
- * **Stores Information on EEPROM**
-
-   Information stored on non volatile Arduino's EEPROM memory to preserve Users' tag and Master Card. No Information lost
-   if power lost. EEPROM has unlimited Read cycle but roughly 100,000 limited Write cycle.
-
- * **Security**
-   To keep it simple we are going to use Tag's Unique IDs. It's simple and not hacker proof.
-
-   @license Released into the public domain.
-
-   Typical pin layout used:
-   -----------------------------------------------------------------------------------------
-               MFRC522      Arduino       Arduino   Arduino    Arduino          Arduino
-               Reader/PCD   Uno/101       Mega      Nano v3    Leonardo/Micro   Pro Micro
-   Signal      Pin          Pin           Pin       Pin        Pin              Pin
-   -----------------------------------------------------------------------------------------
-   RST/Reset   RST          9             5         D9         RESET/ICSP-5     RST
-   SPI SS      SDA(SS)      10            53        D10        10               10
-   SPI MOSI    MOSI         11 / ICSP-4   51        D11        ICSP-4           16
-   SPI MISO    MISO         12 / ICSP-1   50        D12        ICSP-1           14
-   SPI SCK     SCK          13 / ICSP-3   52        D13        ICSP-3           15
-*/
-
 #include <EEPROM.h>     // We are going to read and write PICC's UIDs from/to EEPROM
 #include <SPI.h>        // RC522 Module uses SPI protocol
 #include <MFRC522.h>  // Library for Mifare RC522 Devices
@@ -66,6 +38,9 @@
   to use common cathode led or just seperate leds, simply comment out #define COMMON_ANODE,
 */
 
+// ID as defined in okm
+#define KEYREADER_ID 20
+
 // #define COMMON_ANODE
 
 #ifdef COMMON_ANODE
@@ -76,51 +51,78 @@
 #define LED_OFF LOW
 #endif
 
-#define KEYREADER_ID 20
+// #define INVERT_RELAY
 
-String in_msg = "";
-String rsp_msg = "";
+#ifdef INVERT_RELAY
+#define REL_ON LOW
+#define REL_OFF HIGH
+#else
+#define REL_ON HIGH
+#define REL_OFF LOW
+#endif
 
-constexpr uint8_t redLed = 3;   // Set Led Pins
-constexpr uint8_t greenLed = 2;
-constexpr uint8_t blueLed = 1;
+#define DE_RE_PIN 9
+
+#define BUILDIN_LED 13
+
+String in_msg;
+String rsp_msg;
+String msg;
+String splittedMsg[2];
+
+constexpr uint8_t redLed = 7;   // Set Led Pins
+constexpr uint8_t greenLed = 6;
+constexpr uint8_t blueLed = 5;
 
 constexpr uint8_t relay = 4;     // Set Relay Pin
 
 boolean is_unlocked = false; // Needed to keep consitant led state
 
-uint8_t successRead;    // Variable integer to keep if we have Successful Read from Reader
-
 bool new_read;    // Variable who keeps if we have Successful Read from Reader
 byte readCard[4];   // Stores scanned ID read from RFID Module
 
 // Create MFRC522 instance.
-constexpr uint8_t RST_PIN = 2;     // Configurable, see typical pin layout above
-constexpr uint8_t SS_PIN = 10;     // Configurable, see typical pin layout above
+constexpr uint8_t RST_PIN = 2;
+constexpr uint8_t SS_PIN = 10;
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 ///////////////////////////////////////// Setup ///////////////////////////////////
 void setup() {
+  // Avoid Heap fragmentation !?!
+  // read : https://cpp4arduino.com/2018/11/06/what-is-heap-fragmentation.html
+  in_msg.reserve(100);
+  rsp_msg.reserve(100);
+  msg.reserve(100);
+  splittedMsg[0].reserve(50);
+  splittedMsg[1].reserve(50);
+
+  pinMode(BUILDIN_LED, OUTPUT);
+
+  pinMode(DE_RE_PIN, OUTPUT);
+  set_receive_mode();
+
   pinMode(SS_PIN, OUTPUT);
 
-  //Arduino Pin Configuration
   pinMode(redLed, OUTPUT);
   pinMode(greenLed, OUTPUT);
   pinMode(relay, OUTPUT);
-  //Be careful how relay circuit behave on while resetting or power-cycling your Arduino
+
   digitalWrite(relay, LOW);    // Make sure door is locked
   digitalWrite(redLed, LED_OFF);  // Make sure led is off
   digitalWrite(greenLed, LED_OFF);  // Make sure led is off
+  digitalWrite(blueLed, LED_OFF);  // Make sure led is off
 
   //Protocol Configuration
-  Serial.begin(115200);  // Initialize serial communications with PC
+  Serial.begin(9600);  // Initialize serial communications with PC
   SPI.begin();           // MFRC522 Hardware uses SPI protocol
   mfrc522.PCD_Init();    // Initialize MFRC522 Hardware
 
   //If you set Antenna Gain to Max it will increase reading distance
   //mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
 
+  
+  // For debug via proper serial without RS485
   Serial.println(F("Open Key Manager - Arduino with max485 initialized"));
   Serial.print("ID of device : ");
   Serial.println(KEYREADER_ID);
@@ -137,33 +139,36 @@ void loop () {
   if (Serial.available() > 0) {
     // read until ; or timeout after 1 sec
     in_msg = Serial.readStringUntil(';');
+    splitArray(in_msg, splittedMsg, ':');
+    if (splittedMsg[0] == String(KEYREADER_ID)) {
+      msg = splittedMsg[1];
 
-    if (in_msg == "order:ask_for_new") {
-      if (new_read) {
-        rsp_msg = "new_read:";
-        for ( uint8_t i = 0; i < 4; i++) {
-          rsp_msg += String(readCard[i], HEX);
+      if (msg == "ask_for_new") {
+        if (new_read) {
+          rsp_msg = "new_read:";
+          for ( uint8_t i = 0; i < 4; i++) {
+            rsp_msg += String(readCard[i], HEX);
+          }
+          send_message(rsp_msg);
+          new_read = false;
+        } else {
+          send_message("new_read:none");
         }
-        rsp_msg += ";";
-        new_read = false;
-      } else {
-        rsp_msg = "new_read:none;";
+      } else if (msg ==  "order:lock") {
+        send_message("order:lock");
+        lock();
+      } else if (msg == "order:unlock") {
+        send_message("order:unlock");
+        unlock();
+      } else if (msg == "order:denied") {
+        send_message("confirm:denied");
+        denied();
+      } else { // If the message is not known, simply echo with id
+        rsp_msg = String(KEYREADER_ID) + ":unknown_order";
+        send_message(rsp_msg);
+        unknown();
       }
-    } else if (in_msg ==  "order:lock") {
-      lock();
-      rsp_msg = "confirm:lock;";
-    } else if (in_msg == "order:unlock") {
-      unlock();
-      rsp_msg = "confirm:unlock;";
-    } else if (in_msg == "order:denied") {
-      denied();
-      rsp_msg = "confirm:denied;";
-    } else { // If the message is not known, simply echo
-      unknown();
-      rsp_msg = in_msg + ";";
     }
-
-    Serial.print(rsp_msg);
   }
 
   // check led state
@@ -177,6 +182,48 @@ void loop () {
     digitalWrite(blueLed, LED_OFF);
   }
 
+}
+
+void splitArray(String data, String splittedMsg[2], char separator)
+{
+  int sepAt;
+  int maxIndex = data.length(); 
+
+  for (int i=0; i < maxIndex; i++){
+    if (data.charAt(i) == separator) {
+      sepAt = i;
+    }
+  }                                
+  splittedMsg[0] = data.substring(0, sepAt);
+  splittedMsg[1] = data.substring(sepAt+1, maxIndex);
+}
+
+/////////////////////////////////////////  MAX485 communication //////////////////////////////
+void send_message(String msg){
+    // Wait extra 20ms to be sure (is what raspy waits before passing to receive mode)
+    delay(20);
+    set_send_mode();
+
+    Serial.print(msg + ';');
+
+    // Wait for serial to be transmitted
+    while (Serial.availableForWrite() < SERIAL_TX_BUFFER_SIZE - 1){
+      delay(1);                                                
+    }                                                          
+    // Wait extra 20ms to be sure message is transmitted
+    delay(20);
+
+    set_receive_mode();
+}
+
+void set_send_mode(){
+  digitalWrite(BUILDIN_LED, HIGH);
+  digitalWrite(DE_RE_PIN, HIGH);
+}
+
+void set_receive_mode(){
+  digitalWrite(DE_RE_PIN, LOW);
+  digitalWrite(BUILDIN_LED, LOW);
 }
 
 /////////////////////////////////////////  Accesses    ///////////////////////////////////

@@ -33,7 +33,7 @@ void setup() {
 // the loop function runs over and over again forever
 void loop() {
 
-  if (Serial.available() > 1) {
+  if (Serial.available() > 0) {
 
     // read until ; or timeout after 1 sec
     in_msg = Serial.readStringUntil(';');
