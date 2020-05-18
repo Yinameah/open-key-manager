@@ -46,9 +46,9 @@
 #endif
 
 
-String in_msg = "";
-String rsp_msg = "";
-String msg = "";
+String in_msg; 
+String rsp_msg;
+String msg;
 
 constexpr uint8_t redLed = 7;   // Set Led Pins
 constexpr uint8_t greenLed = 6;
@@ -74,6 +74,11 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 ///////////////////////////////////////// Setup ///////////////////////////////////
 void setup() {
+  // Avoid Heap fragmentation !?!
+  // read : https://cpp4arduino.com/2018/11/06/what-is-heap-fragmentation.html
+  in_msg.reserve(100);
+  rsp_msg.reserve(100);
+  msg.reserve(100);
   //Arduino Pin Configuration
   pinMode(redLed, OUTPUT);
   pinMode(greenLed, OUTPUT);

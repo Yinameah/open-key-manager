@@ -139,6 +139,9 @@ void loop () {
   if (Serial.available() > 0) {
     // read until ; or timeout after 1 sec
     in_msg = Serial.readStringUntil(';');
+    // discard eventual extra bytes after ;
+    Serial.flush();
+
     splitArray(in_msg, splittedMsg, ':');
     if (splittedMsg[0] == String(KEYREADER_ID)) {
       msg = splittedMsg[1];
@@ -154,13 +157,13 @@ void loop () {
         } else {
           send_message("new_read:none");
         }
-      } else if (msg ==  "order:lock") {
-        send_message("order:lock");
+      } else if (msg ==  "lock") {
+        send_message("confirm:lock");
         lock();
-      } else if (msg == "order:unlock") {
-        send_message("order:unlock");
+      } else if (msg == "unlock") {
+        send_message("confirm:unlock");
         unlock();
-      } else if (msg == "order:denied") {
+      } else if (msg == "denied") {
         send_message("confirm:denied");
         denied();
       } else { // If the message is not known, simply echo with id
