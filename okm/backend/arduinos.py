@@ -21,11 +21,13 @@
 
 try:
     import okm.glob as glob
+    from okm.backend.max485 import Max485
 except ImportError as e:
     import sys
 
     sys.path.append("/home/aurelien/sketchbook/open-key-manager")
     import okm.glob as glob
+    from okm.backend.max485 import Max485
 
 import serial
 from serial.tools import list_ports
@@ -59,7 +61,7 @@ def get_arduinos():
     ###################################################
     arduinos = [
         USBArduino(10, "85735313932351B011E2"),
-        # USBArduino(20, "A94ZNPHH"),
+        RS485Arduino(20),
         # FIXME VirtualArdino doesn't respect API anymore. Update if needed
         # VirtualArduino(30),
     ]
@@ -122,6 +124,7 @@ class USBArduino:
                 except queue.Empty as e:
                     pass
                 else:
+                    line += ";"
                     logging.info(f"{self} loop : arduino <-- {line} ")
                     ser.write(line.encode())
 
@@ -144,6 +147,30 @@ class USBArduino:
 
     def __str__(self):
         return f"< USBArduino, id:{self.id} >"
+
+
+class RS485Arduino:
+    def __init__(self, a_id):
+        self.id = a_id
+
+    def send_message(self, msg):
+        """ Send message to arduino """
+        Max485.send_message(self.id, msg)
+
+    def recv_message(self):
+        """ Receive message from arduino """
+        # Try to get a new read
+        new_read = Max485.recv_message(self.id)
+
+        p1, p2 = new_read.split(":")
+
+        if p1 == "new_read" and p2 == "none":
+            return None
+        else:
+            return new_read
+
+    def stop(self):
+        pass
 
 
 class VirtualArduino:

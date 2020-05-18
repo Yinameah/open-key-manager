@@ -5,6 +5,7 @@ from serial.tools import list_ports
 import RPi.GPIO as gpio
 
 
+# FIXME : only one pin is needed. To be updated on new hardware version
 RE_PIN = 23
 DE_PIN = 4
 

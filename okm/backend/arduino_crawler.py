@@ -32,8 +32,9 @@ try:
     import okm.glob as glob
     from okm.backend.arduinos import get_arduinos
     from okm.utils import DbCursor
-except ImportError:
+except ImportError as e:
     logging.fatal("okm not importable here. Might be a problem")
+    raise (e)
 
 
 class Singleton(type):
@@ -123,7 +124,7 @@ class ArduinoCrawler(metaclass=Singleton):
                     )
                     with LOCK:
                         self.mainwindow_notify["unknown_key"] = request_key
-                    a.send_message("order:denied;")
+                    a.send_message("order:denied")
                     continue
 
                 if r[str(a.id)] == 1:
@@ -148,12 +149,12 @@ class ArduinoCrawler(metaclass=Singleton):
                         else:
                             print("Déverouillage pas marche")
                             # Prevent unwanted unlock
-                            a.send_message("order:lock;")
+                            a.send_message("order:lock")
 
                     elif self.arduinos_states[a.id] == request_key:
 
                         print("Même user, on essaye de reverouiller")
-                        a.send_message("order:lock;")
+                        a.send_message("order:lock")
                         lock_state = "locked"
 
                         if is_answer(a, "confirm:lock"):
@@ -168,7 +169,7 @@ class ArduinoCrawler(metaclass=Singleton):
                         else:
                             print("Reverouillage pas marche")
                             # Prevent unwanted lock
-                            a.send_message("order:unlock;")
+                            a.send_message("order:unlock")
 
                     else:
                         print("Déjà utilisé par quelqu'un d'autre ...")
