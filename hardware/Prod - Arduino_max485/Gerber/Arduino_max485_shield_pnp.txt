@@ -1,0 +1,31 @@
+*Pick And Place List
+*Company=
+*Author=
+*eMail=
+*
+*Project=Arduino_max485_shield
+*Date=21:22:04
+*CreatedBy=Fritzing 0.9.4..
+*
+*
+*Coordinates in mm, always center of component
+*Origin 0/0=Lower left corner of PCB
+*Rotation in degree (0-360, math. pos.)
+*
+*No;Value;Package;X;Y;Rotation;Side;Name
+1;;;48.9452;-56.5132;0;Bottom;Hole2
+2;;;36.8709;-33.4549;-90;Bottom;rfid reader
+3;;;24.0062;-56.5132;0;Bottom;Hole3
+4;;THT;61.9712;-49.5217;180;Bottom;Phone power
+5;;5 mm [THT];58.279;-9.731;0;Bottom;LedB
+6;120;THT;62.2252;-36.9487;90;Bottom;Term
+7;220;THT;49.171;-25.7681;-135;Bottom;R2
+8;;;62.6649;-54.5341;0;Bottom;TXT1
+9;;THT;34.0219;-15.644;-90;Bottom;Relay output
+10;;;56.9375;-46.9498;0;Bottom;TXT1
+11;220;THT;50.441;-32.1181;-135;Bottom;R3
+12;220;THT;45.7152;-14.0887;-90;Bottom;R4
+13;;5 mm [THT];58.279;-17.351;0;Bottom;LedV
+14;;;34.1489;-56.0301;90;Bottom;Arduino
+15;;5 mm [THT];58.279;-24.971;0;Bottom;LedR
+16;;board;34.6514;-36.1851;180;Bottom;485
