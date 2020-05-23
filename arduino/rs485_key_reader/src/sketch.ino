@@ -38,6 +38,7 @@
   to use common cathode led or just seperate leds, simply comment out #define COMMON_ANODE,
 */
 
+
 // ID as defined in okm
 #define KEYREADER_ID 20
 
@@ -63,18 +64,16 @@
 
 #define DE_RE_PIN 9
 
-#define BUILDIN_LED 13
-
 String in_msg;
 String rsp_msg;
 String msg;
 String splittedMsg[2];
 
-constexpr uint8_t redLed = 7;   // Set Led Pins
-constexpr uint8_t greenLed = 6;
-constexpr uint8_t blueLed = 5;
+constexpr uint8_t redLed = 4;   // Set Led Pins
+constexpr uint8_t greenLed = 5;
+constexpr uint8_t blueLed = 6;
 
-constexpr uint8_t relay = 4;     // Set Relay Pin
+constexpr uint8_t relay = 8;     // Set Relay Pin
 
 boolean is_unlocked = false; // Needed to keep consitant led state
 
@@ -82,13 +81,14 @@ bool new_read;    // Variable who keeps if we have Successful Read from Reader
 byte readCard[4];   // Stores scanned ID read from RFID Module
 
 // Create MFRC522 instance.
-constexpr uint8_t RST_PIN = 2;
+constexpr uint8_t RST_PIN = 7;
 constexpr uint8_t SS_PIN = 10;
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 ///////////////////////////////////////// Setup ///////////////////////////////////
 void setup() {
+
   // Avoid Heap fragmentation !?!
   // read : https://cpp4arduino.com/2018/11/06/what-is-heap-fragmentation.html
   in_msg.reserve(100);
@@ -96,8 +96,6 @@ void setup() {
   msg.reserve(100);
   splittedMsg[0].reserve(50);
   splittedMsg[1].reserve(50);
-
-  pinMode(BUILDIN_LED, OUTPUT);
 
   pinMode(DE_RE_PIN, OUTPUT);
   set_receive_mode();
@@ -107,6 +105,8 @@ void setup() {
   pinMode(redLed, OUTPUT);
   pinMode(greenLed, OUTPUT);
   pinMode(relay, OUTPUT);
+
+  test_leds();
 
   digitalWrite(relay, LOW);    // Make sure door is locked
   digitalWrite(redLed, LED_OFF);  // Make sure led is off
@@ -180,8 +180,10 @@ void loop () {
     digitalWrite(redLed, LED_OFF);
     digitalWrite(blueLed, LED_OFF);
   } else {
+    // redLed is turned on when a read occur (before transmission)
+    // so we don't turn it off here
+    // TODO : change to blue when available
     digitalWrite(greenLed, LED_OFF);
-    digitalWrite(redLed, LED_OFF);
     digitalWrite(blueLed, LED_OFF);
   }
 
@@ -220,13 +222,11 @@ void send_message(String msg){
 }
 
 void set_send_mode(){
-  digitalWrite(BUILDIN_LED, HIGH);
   digitalWrite(DE_RE_PIN, HIGH);
 }
 
 void set_receive_mode(){
   digitalWrite(DE_RE_PIN, LOW);
-  digitalWrite(BUILDIN_LED, LOW);
 }
 
 /////////////////////////////////////////  Accesses    ///////////////////////////////////
@@ -272,6 +272,28 @@ void unknown() {
   }
 }
 
+void test_leds() {
+  for ( uint8_t i = 0; i < 3; i++) {
+    digitalWrite(redLed, LED_ON);   
+    delay(100);
+    digitalWrite(redLed, LED_OFF);   
+    delay(100);
+  }
+  for ( uint8_t i = 0; i < 3; i++) {
+    digitalWrite(greenLed, LED_ON);   
+    delay(100);
+    digitalWrite(greenLed, LED_OFF);   
+    delay(100);
+  }
+  for ( uint8_t i = 0; i < 3; i++) {
+    digitalWrite(blueLed, LED_ON);   
+    delay(100);
+    digitalWrite(blueLed, LED_OFF);   
+    delay(100);
+  }
+}
+
+
 
 ///////////////////////////////////////// Get PICC's UID ///////////////////////////////////
 uint8_t getID() {
@@ -290,6 +312,7 @@ uint8_t getID() {
   }
   new_read = true;
   mfrc522.PICC_HaltA(); // Stop reading
+  digitalWrite(redLed, LED_ON);
   return 1;
 }
 
